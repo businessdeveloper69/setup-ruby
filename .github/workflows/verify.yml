@@ -5,13 +5,9 @@ on:
 permissions:
   contents: read
 jobs:
-  save:
+  windows_optout_save:
     if: github.repository == 'businessdeveloper69/setup-ruby'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-2025, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-2025
     timeout-minutes: 35
     env:
       CI: spec
@@ -19,29 +15,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/checkout@v7
-        with:
-          repository: rack/rack
-          ref: b432304e8ddc23cc98564d2a8365827b59a835bd
-          path: rack
-          persist-credentials: false
-      - name: Verify both vendor bundles start absent
+      - name: Verify opt-out bundle starts absent
         shell: bash
-        run: test ! -e rack/vendor/bundle && test ! -e opt-out/vendor/bundle
-      - name: save default through packaged action
-        uses: businessdeveloper69/setup-ruby@f189575505c3506643c54b4e5dc213eadb3a2410
-        with:
-          ruby-version: '4.0.10'
-          bundler: '4.1.0'
-          bundler-cache: true
-          working-directory: rack
-          cache-version: native-983-${{ github.run_id }}-default
-      - name: Inspect default installed bundle
-        working-directory: rack
-        run: bundle exec ruby ../verify.rb default save
-      - name: Exercise the Rack mock request specs
-        working-directory: rack
-        run: bundle exec ruby test/spec_mock_request.rb
+        run: test ! -e opt-out/vendor/bundle
       - name: save opt-out through packaged action
         uses: businessdeveloper69/setup-ruby@f189575505c3506643c54b4e5dc213eadb3a2410
         env:
@@ -51,18 +27,13 @@ jobs:
           bundler: '4.1.0'
           bundler-cache: true
           working-directory: opt-out
-          cache-version: native-983-${{ github.run_id }}-opt-out
+          cache-version: native-983-44959242907-opt-out
       - name: Inspect opt-out installed bundle
         working-directory: opt-out
         run: bundle exec ruby ../verify.rb opt-out save
-  restore:
-    needs: save
+  macos_restore:
     if: github.repository == 'businessdeveloper69/setup-ruby'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-2025, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-15
     timeout-minutes: 35
     env:
       CI: spec
@@ -86,7 +57,7 @@ jobs:
           bundler: '4.1.0'
           bundler-cache: true
           working-directory: rack
-          cache-version: native-983-${{ github.run_id }}-default
+          cache-version: native-983-44959242907-default
       - name: Inspect default installed bundle
         working-directory: rack
         run: bundle exec ruby ../verify.rb default restore
@@ -102,7 +73,61 @@ jobs:
           bundler: '4.1.0'
           bundler-cache: true
           working-directory: opt-out
-          cache-version: native-983-${{ github.run_id }}-opt-out
+          cache-version: native-983-44959242907-opt-out
+      - name: Inspect opt-out installed bundle
+        working-directory: opt-out
+        run: bundle exec ruby ../verify.rb opt-out restore
+  windows_restore:
+    needs: windows_optout_save
+    if: github.repository == 'businessdeveloper69/setup-ruby'
+    runs-on: windows-2025
+    timeout-minutes: 35
+    env:
+      CI: spec
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+        with:
+          repository: rack/rack
+          ref: b432304e8ddc23cc98564d2a8365827b59a835bd
+          path: rack
+          persist-credentials: false
+      - name: Verify Rack spec bytes match the pinned Git object
+        shell: bash
+        run: test "$(git -C rack hash-object --no-filters test/spec_mock_request.rb)" = "$(git -C rack rev-parse HEAD:test/spec_mock_request.rb)"
+      - name: Verify both vendor bundles start absent
+        shell: bash
+        run: test ! -e rack/vendor/bundle && test ! -e opt-out/vendor/bundle
+      - name: restore default through packaged action
+        uses: businessdeveloper69/setup-ruby@f189575505c3506643c54b4e5dc213eadb3a2410
+        with:
+          ruby-version: '4.0.10'
+          bundler: '4.1.0'
+          bundler-cache: true
+          working-directory: rack
+          cache-version: native-983-44959242907-default
+      - name: Inspect default installed bundle
+        working-directory: rack
+        run: bundle exec ruby ../verify.rb default restore
+      - name: Exercise the Rack mock request specs
+        working-directory: rack
+        run: bundle exec ruby test/spec_mock_request.rb
+      - name: restore opt-out through packaged action
+        uses: businessdeveloper69/setup-ruby@f189575505c3506643c54b4e5dc213eadb3a2410
+        env:
+          BUNDLE_PRUNE: "false"
+        with:
+          ruby-version: '4.0.10'
+          bundler: '4.1.0'
+          bundler-cache: true
+          working-directory: opt-out
+          cache-version: native-983-44959242907-opt-out
       - name: Inspect opt-out installed bundle
         working-directory: opt-out
         run: bundle exec ruby ../verify.rb opt-out restore
